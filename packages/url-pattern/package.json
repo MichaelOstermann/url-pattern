@@ -1,0 +1,34 @@
+{
+    "name": "@monstermann/url-pattern",
+    "type": "module",
+    "version": "0.0.0",
+    "description": "Type-safe url pattern matching.",
+    "author": "Michael Ostermann <michaelostermann@me.com>",
+    "license": "MIT",
+    "homepage": "https://MichaelOstermann.github.io/url-pattern",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/MichaelOstermann/url-pattern.git"
+    },
+    "bugs": {
+        "url": "https://github.com/MichaelOstermann/url-pattern/issues"
+    },
+    "keywords": [],
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "main": "./dist/index.mjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "bundle": "tsdown"
+    },
+    "dependencies": {}
+}
