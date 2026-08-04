@@ -25,8 +25,8 @@ export default defineConfig({
             provider: "local",
         },
         sidebar: [
+            { link: "pathPattern", text: "pathPattern" },
             { link: "urlPattern", text: "urlPattern" },
-            { link: "urlMatcher", text: "urlMatcher" },
         ],
         socialLinks: [
             { icon: "github", link: "https://github.com/MichaelOstermann/url-pattern" },

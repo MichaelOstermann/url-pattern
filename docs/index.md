@@ -6,12 +6,12 @@ aside: true
 
 <Badge type="info" class="size">
     <span>Minified</span>
-    <span>1.77 KB</span>
+    <span>4.45 KB</span>
 </Badge>
 
 <Badge type="info" class="size">
     <span>Minzipped</span>
-    <span>761 B</span>
+    <span>1.69 KB</span>
 </Badge>
 
 **Type-safe url pattern matching.**
@@ -21,50 +21,47 @@ aside: true
 ::: code-group
 
 ```ts [Pattern]
-const matchPattern = urlPattern(
-    "/api/:version{v1|v2}/users/:id?sort&order{asc|desc}",
-);
+const matchPattern = pathPattern("/api/:version{v1|v2}/users/:id");
 
-const result = matchPattern("/api/v1/users/123?sort=name&order=asc");
+const result = matchPattern("/api/v1/users/123");
 ```
 
 ```ts [Type]
 type Result =
     | undefined
     | {
-          params: {
-              version: "v1" | "v2";
-              id: string;
-          };
-          search: {
-              sort?: string;
-              order?: "asc" | "desc";
-          };
-          raw: {
-              hash: string;
-              host: string;
-              hostname: string;
-              href: string;
-              origin: string;
-              password: string;
-              pathname: string;
-              port: string;
-              protocol: string;
-              search: string;
-              username: string;
-          };
+          version: "v1" | "v2";
+          id: string;
       };
 ```
 
 ```ts [Result]
-const result = {
-    params: { id: "123", version: "v1" },
-    search: { order: "asc", sort: "name" },
-    raw: {...},
-};
+const result = { id: "123", version: "v1" };
 ```
 
 :::
+
+## Two functions
+
+[`pathPattern`](./pathPattern) matches the path only, and ignores the protocol and host entirely:
+
+```ts
+const matchPattern = pathPattern("/:workspaceId/task/:taskId");
+
+matchPattern("/ws1/task/t1"); // {...}
+matchPattern("https://anything.com/ws1/task/t1"); // {...}
+```
+
+[`urlPattern`](./urlPattern) matches the whole url, and requires a protocol and a host:
+
+```ts
+const matchPattern = urlPattern("miko://:workspaceId/task/:taskId");
+
+matchPattern("miko://ws1/task/t1"); // {...}
+matchPattern("https://evil.com/ws1/task/t1"); // undefined
+```
+
+Reach for `urlPattern` whenever the origin is part of what you are asserting — deep links, webhooks, anything where a url from somewhere else must not be mistaken for one of yours.
 
 ## Installation
 

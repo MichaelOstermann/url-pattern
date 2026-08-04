@@ -1,132 +1,49 @@
-import type { UrlPattern } from "./types"
+import type { RequireOrigin, UrlPattern } from "./types"
+import { assertPattern, compileGroup, compilePath, matchGroup, matchPath, parseUrl } from "./compile"
 
-const basePath = "http://localhost"
+export function urlPattern<const T extends string>(
+    pattern: RequireOrigin<T>,
+): (url: string) => UrlPattern<T> | undefined {
+    const source = pattern as string
+    assertPattern(source)
 
-export function urlPattern<const T extends string>(pattern: T): (url: string) => UrlPattern<T> | undefined {
-    let re = "^/"
-    let captureOffset = 1
-    const paramCaptures: [string, number][] = []
-    const searchCaptures: [string, boolean, Set<string>][] = []
-    let hasExplicitOrigin = false
-    let urlA: URL
-    try {
-        urlA = new URL(pattern)
-        hasExplicitOrigin = true
-    }
-    catch {
-        urlA = new URL(pattern, basePath)
+    const index = source.indexOf("://")
+    if (index === -1) {
+        throw new Error(`Invalid pattern "${source}": urlPattern requires a protocol and a host, eg. "https://example.com/path" - did you mean pathPattern?`)
     }
 
-    for (const part of urlA.pathname.split("/")) {
-        if (!part) continue
+    const rest = source.slice(index + 3)
+    const slash = rest.indexOf("/")
+    const authority = slash === -1 ? rest : rest.slice(0, slash)
 
-        const match = decodeURIComponent(part).match(/^(:)?([^{]+)?(\{[^}]+\})?$/)
-        if (!match) continue
-
-        const [raw, capture, name, union] = match
-
-        // *
-        if (!capture && name === "*" && !union) {
-            re += "[^/]+/"
-        }
-        // **
-        else if (!capture && name === "**" && !union) {
-            re += ".+/"
-        }
-        // foo
-        else if (!capture && name && !union) {
-            re += `${escapeRegExp(name)}/`
-        }
-        // {foo|bar}
-        else if (!capture && !name && union) {
-            re += `(?:${union.slice(1, -1).split("|").map(escapeRegExp).join("|")})/`
-        }
-        // :foo
-        else if (capture && name && !union) {
-            re += "([^/]+)/"
-            paramCaptures.push([name, captureOffset++])
-        }
-        // :foo{bar|baz}
-        else if (capture && name && union) {
-            re += `(${union.slice(1, -1).split("|").map(escapeRegExp).join("|")})/`
-            paramCaptures.push([name, captureOffset++])
-        }
-        else {
-            throw new Error(`urlPattern(pattern: ${pattern}): Invalid pattern ${raw}`)
-        }
+    if (authority.includes("@")) {
+        throw new Error(`Invalid pattern "${source}": urls are matched by host, not by userinfo - remove "@" from "${authority}".`)
     }
-    const r = new RegExp(`${re}?$`)
 
-    for (const part of urlA.search.slice(1).split("&")) {
-        if (!part) continue
-
-        const match = part.match(/^([^{[\]]+)?(\{[^}]+\})?(\[\])?$/)
-        if (!match) continue
-
-        const [raw, name, union, array] = match
-
-        if (name) {
-            const unionSet = union
-                ? new Set((union || "").slice(1, -1).split("|"))
-                : new Set<string>()
-            searchCaptures.push([name, !!array, unionSet])
-        }
-        else {
-            throw new Error(`urlPattern(pattern: ${pattern}): Invalid pattern ${raw}`)
-        }
+    if (/[[\]]/.test(authority)) {
+        throw new Error(`Invalid pattern "${source}": ipv6 hosts are not supported.`)
     }
+
+    const parts = authority.match(/^(:?[^:]+)(?::(.*))?$/)
+    if (!parts) throw new Error(`Invalid pattern "${source}": malformed authority "${authority}".`)
+
+    const protocolGroup = compileGroup(source.slice(0, index), source, "i")
+    const hostGroup = compileGroup(parts[1]!, source, "i")
+    const portGroup = parts[2] === undefined ? undefined : compileGroup(parts[2], source)
+    const path = compilePath(slash === -1 ? "" : rest.slice(slash), source)
 
     return function (url) {
-        const urlB = new URL(url, basePath)
-        // Only enforce origin matching if the pattern had an explicit origin
-        if (hasExplicitOrigin && urlA.origin !== urlB.origin) return
+        const parsed = parseUrl(url)
+        if (!parsed) return
 
         const params: Record<string, string> = {}
-        const search: Record<string, string | string[]> = {}
-        const raw = {
-            hash: urlB.hash,
-            host: urlB.host,
-            hostname: urlB.hostname,
-            href: urlB.href,
-            origin: urlB.origin,
-            password: urlB.password,
-            pathname: urlB.pathname,
-            port: urlB.port,
-            protocol: urlB.protocol,
-            search: urlB.search,
-            username: urlB.username,
-        }
+        if (!matchGroup(protocolGroup, parsed.protocol.slice(0, -1), params)) return
+        if (!matchGroup(hostGroup, parsed.hostname, params)) return
+        if (portGroup && !matchGroup(portGroup, parsed.port, params)) return
 
-        const m = urlB.pathname.match(r)
-        if (!m) return
+        const pathname = parsed.pathname
+        if (!matchPath(path, pathname, 0, pathname.length, params)) return
 
-        for (const [name, offset] of paramCaptures) {
-            params[name] = decodeURIComponent(m[offset]!)
-        }
-
-        for (const [name, isArray, union] of searchCaptures) {
-            if (!urlB.searchParams.has(name)) continue
-            if (isArray) {
-                const values = urlB.searchParams.getAll(name)
-                if (union.size > 0) {
-                    search[name] = values.filter(v => union.has(v))
-                }
-                else {
-                    search[name] = values
-                }
-            }
-            else {
-                const value = urlB.searchParams.get(name)!
-                if (union.size === 0 || union.has(value)) {
-                    search[name] = value
-                }
-            }
-        }
-
-        return { params, raw, search } as any
+        return params as any
     }
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }

@@ -10,7 +10,14 @@ function urlPattern<const T extends string>(
 ): (url: string) => UrlPattern<T> | undefined;
 ```
 
-Creates a pattern matching function that parses urls and extracts typed parameters from paths and search queries.
+Creates a pattern matching function that matches the **whole** url — protocol, host, port and path.
+
+A pattern must declare a protocol and a host. If you only care about the path, use [`pathPattern`](./pathPattern) instead.
+
+```ts
+urlPattern("/posts/:id");
+//         ^ type error, and throws: did you mean pathPattern?
+```
 
 ## Example
 
@@ -19,450 +26,199 @@ Creates a pattern matching function that parses urls and extracts typed paramete
 ```ts [Pattern]
 import { urlPattern } from "@monstermann/url-pattern";
 
-const matchPattern = urlPattern("/posts/:id?page");
+const matchPattern = urlPattern("miko://:workspaceId/task/:taskId");
 
-matchPattern("/posts/1?page=2");
+matchPattern("miko://ws1/task/t1");
 ```
 
 ```ts [Type]
 function matchPattern(url: string):
     | undefined
     | {
-          params: {
-              id: string;
-          };
-          search: {
-              page?: string;
-          };
-          raw: {
-              hash: string;
-              host: string;
-              hostname: string;
-              href: string;
-              origin: string;
-              password: string;
-              pathname: string;
-              port: string;
-              protocol: string;
-              search: string;
-              username: string;
-          };
+          workspaceId: string;
+          taskId: string;
       };
 ```
 
 ```ts [Result]
 {
-  params: {
-    id: "1",
-  },
-  search: {
-    page: "2",
-  },
-  raw: {
-    hash: "",
-    // http://localhost is the fallback origin, as `new URL()` requires one.
-    host: "localhost",
-    hostname: "localhost",
-    href: "http://localhost/posts/1?page=2",
-    origin: "http://localhost",
-    password: "",
-    pathname: "/posts/1",
-    port: "",
-    protocol: "http:",
-    search: "?page=2",
-    username: "",
-  },
+  workspaceId: "ws1",
+  taskId: "t1",
 }
 ```
 
 :::
 
-## Customizing behavior
-
-In the wild, there are many different scenarios and corner-cases not covered by this library:
-
-- Handle backwards-compatible deprecated routes
-- Roll your own search parameter parser for non-standard syntax
-- Combine multiple alternative routes into one
-- Recover from invalid routes
-- Parse url hash
-- Coerce types
-- Apply fallbacks
-- Validate data, eg. with [zod](https://zod.dev/)
-
-`urlPattern` is intentionally kept simple, for you to be able to quickly wrap it and do whatever you'd like:
+Note where the pieces land: in `miko://ws1/task/t1` the workspace id is the **host**, so the path is only `/task/t1`. Web urls put it in the path instead, which makes them a different shape:
 
 ```ts
-import { urlPattern } from "@monstermann/url-pattern";
-
-const oldPattern = urlPattern("/posts/:id?page");
-const newPattern = urlPattern("/post/:id?page");
-
-// { id: number, page: number } | undefined
-function parseRoute(url: string) {
-    const match = oldPattern(url) ?? newPattern(url);
-    if (!match) return;
-
-    const id = Number(match.params.id);
-    if (!Number.isInteger(id)) return;
-
-    let page = Number(match.search.page || "1");
-    if (!Number.isInteger(page) || page < 1) page = 1;
-
-    return { id, page };
-}
+urlPattern("miko://:workspaceId/task/:taskId");
+urlPattern("https://miko.chat/:workspaceId/task/:taskId");
 ```
 
-## Path parameters syntax
+## Why declare the origin
 
-Static paths match exact URL segments.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo/bar");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {};
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo/bar");
-
-// undefined
-matchPattern("/foo");
-matchPattern("/foo/baz");
-matchPattern("/foo/bar/baz");
-```
-
-:::
-
-`{}` can be used to match one of several literal alternatives.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo/{bar|baz}");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {};
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo/bar");
-matchPattern("/foo/baz");
-
-// undefined
-matchPattern("/foo");
-matchPattern("/foo/qux");
-matchPattern("/foo/bar/baz");
-```
-
-:::
-
-`:` can be used to capture URL parameters.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/:foo/:bar");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {
-              foo: string;
-              bar: string;
-          };
-          search: {};
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: { foo: "foo", bar: "bar" }, search: {}, raw: {...} }
-matchPattern("/foo/bar");
-// { params: { foo: "bar", bar: "baz" }, search: {}, raw: {...} }
-matchPattern("/bar/baz");
-
-// undefined
-matchPattern("/foo");
-matchPattern("/foo/bar/baz");
-```
-
-:::
-
-`:` combined with `{}` captures a parameter constrained to specific values.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/:foo{bar|baz}");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {
-              foo: "bar" | "baz";
-          };
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: { foo: "bar" }, search: {}, raw: {...} }
-matchPattern("/bar");
-// { params: { foo: "baz" }, search: {}, raw: {...} }
-matchPattern("/baz");
-
-// undefined
-matchPattern("/foo");
-matchPattern("/bar/baz");
-```
-
-:::
-
-`*` matches exactly one URL segment.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo/*/bar");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {};
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo/baz/bar");
-matchPattern("/foo/qux/bar");
-
-// undefined
-matchPattern("/foo");
-matchPattern("/foo/baz/qux/bar");
-matchPattern("/foo/baz/bar/qux");
-```
-
-:::
-
-`**` matches one or more URL segments.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo/**/bar");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {};
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo/baz/bar");
-matchPattern("/foo/baz/qux/bar");
-
-// undefined
-matchPattern("/foo");
-matchPattern("/foo/bar");
-matchPattern("/foo/baz/bar/qux");
-```
-
-:::
-
-## Search parameters syntax
-
-`?` can be used to define optional query parameters.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo?bar&baz");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {
-              bar?: string;
-              baz?: string;
-          };
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo");
-// { params: {}, search: { bar: "bar" }, raw: {...} }
-matchPattern("/foo?bar=bar");
-// { params: {}, search: { baz: "baz" }, raw: {...} }
-matchPattern("/foo?baz=baz");
-// { params: {}, search: { bar: "bar", baz: "baz" }, raw: {...} }
-matchPattern("/foo?bar=bar&baz=baz");
-// { params: {}, search: { bar: "bar", baz: "baz" }, raw: {...} }
-matchPattern("/foo?bar=bar&baz=baz&qux=qux");
-```
-
-:::
-
-`{}` can constrain query parameters to specific values.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo?bar{baz|qux}");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {
-              bar?: "baz" | "qux";
-          };
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo");
-// { params: {}, search: { bar: "baz" }, raw: {...} }
-matchPattern("/foo?bar=baz");
-// { params: {}, search: { bar: "qux" }, raw: {...} }
-matchPattern("/foo?bar=qux");
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo?bar=bar");
-// { params: {}, search: { bar: "baz" }, raw: {...} }
-matchPattern("/foo?bar=baz&qux=qux");
-```
-
-:::
-
-`[]` can be used to capture query parameters as arrays.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo?bar[]");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {
-              bar?: string[];
-          };
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo");
-// { params: {}, search: { bar: ["bar"] }, raw: {...} }
-matchPattern("/foo?bar=bar");
-// { params: {}, search: { bar: ["bar", "baz"] }, raw: {...} }
-matchPattern("/foo?bar=bar&bar=baz");
-// { params: {}, search: { bar: ["bar"] }, raw: {...} }
-matchPattern("/foo?bar=bar&baz=baz");
-```
-
-:::
-
-`{}` and `[]` can be combined to constrain array elements to specific values.
-
-::: code-group
-
-```ts [Pattern]
-const matchPattern = urlPattern("/foo?bar{baz|qux}[]");
-```
-
-```ts [Type]
-function matchPattern(url: string):
-    | undefined
-    | {
-          params: {};
-          search: {
-              bar?: ("baz" | "qux")[];
-          };
-          raw: Raw;
-      };
-```
-
-```ts [Examples]
-// { params: {}, search: {}, raw: {...} }
-matchPattern("/foo");
-// { params: {}, search: { bar: ["baz"] }, raw: {...} }
-matchPattern("/foo?bar=baz");
-// { params: {}, search: { bar: ["qux"] }, raw: {...} }
-matchPattern("/foo?bar=qux");
-// { params: {}, search: { bar: [] }, raw: {...} }
-matchPattern("/foo?bar=bar");
-// { params: {}, search: { bar: ["baz", "qux"] }, raw: {...} }
-matchPattern("/foo?bar=baz&bar=qux");
-// { params: {}, search: { bar: ["baz"] }, raw: {...} }
-matchPattern("/foo?bar=baz&baz=baz");
-```
-
-:::
-
-## Strict origin matching
-
-Patterns without an explicit origin match URLs from any origin.
+A path-only pattern matches a url from anywhere. That is often fine, and occasionally a security bug:
 
 ```ts
-const matchPattern = urlPattern("/:foo");
+const loose = pathPattern("/:workspaceId/task/:taskId");
+loose("https://evil.com/ws1/task/t1"); // {...} <- a foreign url became an internal route
 
-matchPattern("http://foo.com/1"); // {...}
-matchPattern("http://bar.com/1"); // {...}
+const strict = urlPattern("miko://:workspaceId/task/:taskId");
+strict("https://evil.com/ws1/task/t1"); // undefined
 ```
 
-Patterns with an explicit origin only match URLs from that specific origin.
+If you accept urls from outside your app — deep links handed over by the OS, webhook callbacks, pasted links — match them with `urlPattern`.
+
+## Protocol syntax
+
+The protocol is matched case-insensitively, so `MIKO://` and `miko://` behave the same.
 
 ```ts
-const matchPattern = urlPattern("http://foo.com/:bar");
+// Exactly one protocol
+urlPattern("miko://:workspaceId/task/:taskId");
 
-matchPattern("http://foo.com/1"); // {...}
-matchPattern("http://bar.com/1"); // undefined
+// One of several
+urlPattern("{http|https}://miko.chat/:workspaceId");
+
+// Any protocol
+urlPattern("*://miko.chat/:workspaceId");
+
+// Captured
+urlPattern(":protocol://miko.chat/:workspaceId");
+```
+
+## Host syntax
+
+Hosts are matched case-insensitively. `*` matches any characters, including dots.
+
+```ts
+// Exactly one host
+urlPattern("https://miko.chat/:id");
+
+// Any host
+urlPattern("https://*/:id");
+
+// Any subdomain
+urlPattern("https://*.miko.chat/:id");
+
+// Partial
+urlPattern("https://api.*.miko.chat/:id");
+
+// One of several
+urlPattern("https://{miko.chat|miko.dev}/:id");
+
+// Captured — takes the whole host, dots included
+urlPattern("https://:host/:id");
+```
+
+A captured host is **not** decoded, and comes through exactly as the url parser produced it. Two consequences worth knowing:
+
+```ts
+const matchPattern = urlPattern("*://:host/x");
+
+// Custom protocols keep the host verbatim
+matchPattern("miko://01KN1NN37T6D4HE94J1SADGMSR/x");
+// { host: "01KN1NN37T6D4HE94J1SADGMSR" }
+
+// http(s) lowercase it, because there the host is a domain
+matchPattern("https://01KN1NN37T6D4HE94J1SADGMSR/x");
+// { host: "01kn1nn37t6d4he94j1sadgmsr" }
+```
+
+If you put an identifier in the host, keep it to a single protocol. Mixing `miko://` and `https://` in one pattern will hand you different values for the same id.
+
+Urls are matched by host, so userinfo belongs nowhere in a pattern — declaring it throws. Incoming urls may still carry it, and it changes nothing about which host you are looking at.
+
+```ts
+urlPattern("https://user@miko.chat/:id"); // throws: not by userinfo
+
+const matchPattern = urlPattern("https://miko.chat/:id");
+
+matchPattern("https://user:pass@miko.chat/1"); // {...}, the host is miko.chat
+matchPattern("https://miko.chat@evil.com/1"); // undefined, the host is evil.com
+```
+
+IPv6 hosts are not supported, and throw.
+
+## Port syntax
+
+An omitted port matches any port. Default ports (`:80` for http, `:443` for https) are stripped by the url parser, so they never appear.
+
+```ts
+// Any port, present or not
+urlPattern("http://localhost/:id");
+
+// Exactly this port
+urlPattern("http://localhost:3000/:id");
+
+// Any port, but one must be present
+urlPattern("http://localhost:*/:id");
+
+// One of several
+urlPattern("http://localhost:{3000|4000}/:id");
+
+// Captured
+urlPattern("http://localhost::port/:id");
+
+// Combined with a captured host
+urlPattern("http://:host:3000/:id");
+```
+
+Because default ports never appear, a pattern that declares one can never match — `https://miko.chat:443/:id` matches nothing at all.
+
+## Path syntax
+
+Everything after the host uses the same syntax as [`pathPattern`](./pathPattern) — `:param`, `{a|b}`, `:param{a|b}`, `*` and `**`.
+
+```ts
+const matchPattern = urlPattern(
+    "https://miko.chat/api/:version{v1|v2}/users/:id",
+);
+
+matchPattern("https://miko.chat/api/v1/users/123");
+// { version: "v1", id: "123" }
+```
+
+The search query is never matched. Declaring one throws, and an incoming query is ignored.
+
+```ts
+urlPattern("https://miko.chat/x?sort"); // throws: search parameters are never matched
+
+urlPattern("https://miko.chat/x")("https://miko.chat/x?sort=name"); // {...}
+```
+
+## Invalid input
+
+Urls that cannot be parsed, and paths containing malformed percent escapes, return `undefined` rather than throwing — whatever the OS or a remote caller hands you is safe to pass straight in.
+
+```ts
+const matchPattern = urlPattern("miko://:workspaceId/task/:taskId");
+
+matchPattern("miko:///"); // undefined
+matchPattern("//"); // undefined
+matchPattern(""); // undefined
+matchPattern("not a url"); // undefined
+```
+
+A url without an origin never matches — there is no origin to assert.
+
+```ts
+const matchPattern = urlPattern("http://localhost/:id");
+
+matchPattern("http://localhost/1"); // {...}
+matchPattern("/1"); // undefined
+matchPattern("//localhost/1"); // undefined
+```
+
+Invalid _patterns_ throw when the pattern is created, so mistakes surface at startup rather than silently failing to match.
+
+```ts
+urlPattern("/posts/:id"); // throws: did you mean pathPattern?
+urlPattern("https:///posts"); // throws: malformed authority
+urlPattern("https://foo.com/a{b/c"); // throws: unbalanced braces
+urlPattern("https://user@foo.com/x"); // throws: not by userinfo
+urlPattern("http://[::1]:3000/x"); // throws: ipv6 hosts are not supported
+urlPattern("https://foo.com/posts#top"); // throws: hashes are never matched
+urlPattern("https://foo.com/posts?page"); // throws: search parameters are never matched
 ```

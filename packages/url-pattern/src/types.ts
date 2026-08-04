@@ -1,68 +1,43 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
 import type { Simplify } from "./internals"
 
-export type UrlPattern<T extends string> = Simplify<ParseUrlPattern<T> & {
-    raw: {
-        hash: string
-        host: string
-        hostname: string
-        href: string
-        origin: string
-        password: string
-        pathname: string
-        port: string
-        protocol: string
-        search: string
-        username: string
-    }
-}>
+export type PathPattern<T extends string> = Simplify<ParsePath<T>>
 
-export type ParseUrlPattern<
-    Pattern extends string,
-    CleanPattern = EnsureLeadingSlash<
-        Pattern extends `${infer Head}#${string}` ? Head : Pattern
-    >,
-> = CleanPattern extends `${infer Path}?${infer Search}`
-    ? { params: Simplify<ParsePath<Path>>, search: Simplify<ParseSearch<Search>> }
-    : CleanPattern extends string
-        ? { params: Simplify<ParsePath<CleanPattern>>, search: {} }
-        : never
+export type UrlPattern<T extends string> = Simplify<ParseUrlParams<T>>
+
+export type RequireOrigin<T extends string> = T extends `${string}://${string}`
+    ? T
+    : "urlPattern requires a protocol and a host, eg. \"https://example.com/path\" - did you mean pathPattern?"
+
+type ParseUrlParams<T extends string> = T extends `${infer Protocol}://${infer Rest}`
+    ? Rest extends `${infer Authority}/${infer Path}`
+        ? ParseToken<Protocol> & ParseAuthority<Authority> & ParsePath<Path>
+        : ParseToken<Protocol> & ParseAuthority<Rest>
+    : never
+
+type ParseAuthority<T extends string> = T extends `:${infer Rest}`
+    ? Rest extends `${infer Name}:${infer Port}`
+        ? ParseParam<Name> & ParseToken<Port>
+        : ParseParam<Rest>
+    : T extends `${string}:${infer Port}`
+        ? ParseToken<Port>
+        : {}
+
+type ParseToken<T extends string> = T extends `:${infer Name}` ? ParseParam<Name> : {}
 
 type ParsePath<
     Path extends string,
     Parts = Split<Path, "/">,
 > = Parts extends [infer Head, ...infer Tail]
     ? Head extends `:${infer Name}`
-        ? ParsePathParam<Name> & ParsePath<Path, Tail>
+        ? ParseParam<Name> & ParsePath<Path, Tail>
         : ParsePath<Path, Tail>
     : {}
 
-type ParseSearch<
-    Search extends string,
-    Parts = Split<Search, "&">,
-> = Parts extends [infer Head, ...infer Tail]
-    ? Head extends string
-        ? ParseSearchParam<Head> & ParseSearch<Search, Tail>
-        : never
-    : {}
-
-type ParsePathParam<Value extends string> =
+type ParseParam<Value extends string> =
     Value extends `${infer Name}{${infer Union}}`
         ? Record<Name, ExtractUnion<Union>>
         : Record<Value, string>
-
-type ParseSearchParam<Value extends string> =
-    Value extends `${infer Part}[]`
-        ? Part extends `${infer Name}{${infer Union}}`
-            ? Partial<Record<Name, ExtractUnion<Union>[]>>
-            : Partial<Record<Part, string[]>>
-        : Value extends `${infer Name}{${infer Union}}`
-            ? Partial<Record<Name, ExtractUnion<Union>>>
-            : Partial<Record<Value, string>>
-
-type EnsureLeadingSlash<Value extends string> = Value extends `/${string}`
-    ? Value
-    : `/${Value}`
 
 type Split<
     Value extends string,
