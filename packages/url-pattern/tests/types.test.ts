@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
 import type { PathPattern, UrlPattern } from "../src/types"
-import { describe, expectTypeOf, it } from "vitest"
+import { describe, expect, expectTypeOf, it } from "bun:test"
 import { pathPattern } from "../src/pathPattern"
 import { urlPattern } from "../src/urlPattern"
 
@@ -104,9 +104,9 @@ describe("types", () => {
 
         it("should reject patterns without a protocol and host", () => {
             // @ts-expect-error - urlPattern requires a protocol and a host.
-            expectTypeOf(urlPattern).toBeCallableWith("/posts/:id")
+            expect(() => urlPattern("/posts/:id")).toThrow()
             // @ts-expect-error - urlPattern requires a protocol and a host.
-            expectTypeOf(urlPattern).toBeCallableWith("foo.com/posts")
+            expect(() => urlPattern("foo.com/posts")).toThrow()
         })
     })
 

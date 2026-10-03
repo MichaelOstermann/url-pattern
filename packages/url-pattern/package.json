@@ -5,7 +5,7 @@
     "description": "Type-safe url pattern matching.",
     "author": "Michael Ostermann <michaelostermann@me.com>",
     "license": "MIT",
-    "homepage": "https://MichaelOstermann.github.io/url-pattern",
+    "homepage": "https://github.com/MichaelOstermann/url-pattern",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/MichaelOstermann/url-pattern.git"

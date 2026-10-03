@@ -1,5 +1,5 @@
 /* eslint-disable perfectionist/sort-objects */
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "bun:test"
 import { urlPattern } from "../src/urlPattern"
 
 const empty = {}

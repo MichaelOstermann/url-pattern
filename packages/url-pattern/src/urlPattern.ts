@@ -1,6 +1,35 @@
 import type { RequireOrigin, UrlPattern } from "./types"
 import { assertPattern, compileGroup, compilePath, matchGroup, matchPath, parseUrl } from "./compile"
 
+/**
+ * # urlPattern
+ *
+ * ```ts
+ * function urlPattern<const T extends string>(
+ *     pattern: T,
+ * ): (url: string) => UrlPattern<T> | undefined;
+ * ```
+ *
+ * Creates a pattern matching function that matches the **whole** url — protocol, host, port and path.
+ *
+ * A pattern must declare a protocol and a host. If you only care about the path, use `pathPattern` instead.
+ *
+ * Protocol, host and port accept a literal, `{a|b}`, `*` or a captured `:param`; an omitted port matches any port. Everything after the host uses the same syntax as `pathPattern`.
+ *
+ * Invalid patterns throw when the pattern is created, urls that cannot be parsed return `undefined`.
+ *
+ * ## Example
+ *
+ * ```ts
+ * import { urlPattern } from "@monstermann/url-pattern";
+ *
+ * // (url: string) => { workspaceId: string, taskId: string } | undefined
+ * const matchPattern = urlPattern("miko://:workspaceId/task/:taskId");
+ *
+ * matchPattern("miko://ws1/task/t1"); // { workspaceId: "ws1", taskId: "t1" }
+ * matchPattern("https://evil.com/ws1/task/t1"); // undefined
+ * ```
+ */
 export function urlPattern<const T extends string>(
     pattern: RequireOrigin<T>,
 ): (url: string) => UrlPattern<T> | undefined {

@@ -1,5 +1,5 @@
 /* eslint-disable perfectionist/sort-objects */
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "bun:test"
 import { pathPattern } from "../src/pathPattern"
 
 const empty = {}
@@ -244,7 +244,7 @@ describe("pathPattern", () => {
         it("should drop a parameter named __proto__ without polluting", () => {
             const result = pathPattern("/:__proto__")("/x")!
 
-            expect(result).toEqual({})
+            expect<object>(result).toEqual({})
             expect(Object.getPrototypeOf(result)).toBe(Object.prototype)
         })
 
